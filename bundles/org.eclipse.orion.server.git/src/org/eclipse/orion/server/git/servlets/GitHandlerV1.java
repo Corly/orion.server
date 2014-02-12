@@ -11,10 +11,10 @@
 package org.eclipse.orion.server.git.servlets;
 
 import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.*;
 import org.eclipse.core.runtime.*;
 import org.eclipse.orion.internal.server.servlets.ServletResourceHandler;
+import org.eclipse.orion.server.core.PreferenceHelper;
 import org.eclipse.orion.server.git.objects.*;
 import org.eclipse.orion.server.git.objects.Status;
 
@@ -34,6 +34,8 @@ public class GitHandlerV1 extends ServletResourceHandler<String> {
 	private ServletResourceHandler<String> tagHandlerV1;
 	private ServletResourceHandler<String> blameHandlerV1;
 
+	private ServletResourceHandler<IStatus> statusHandler;
+
 	GitHandlerV1(ServletResourceHandler<IStatus> statusHandler) {
 		branchHandlerV1 = new GitBranchHandlerV1(statusHandler);
 		blameHandlerV1 = new GitBlameHandlerV1(statusHandler);
@@ -45,7 +47,7 @@ public class GitHandlerV1 extends ServletResourceHandler<String> {
 		remoteHandlerV1 = new GitRemoteHandlerV1(statusHandler);
 		statusHandlerV1 = new GitStatusHandlerV1(statusHandler);
 		tagHandlerV1 = new GitTagHandlerV1(statusHandler);
-
+		this.statusHandler = statusHandler;
 	}
 
 	@Override
@@ -59,6 +61,21 @@ public class GitHandlerV1 extends ServletResourceHandler<String> {
 			IPath contextPath = new Path(request.getContextPath());
 			if (contextPath.isPrefixOf(path)) {
 				pathString = path.removeFirstSegments(contextPath.segmentCount()).toString();
+			}
+		}
+
+		//TODO: Add to constants
+		String tokenName = PreferenceHelper.getString("ltpa.token.name"); //$NON-NLS-1$
+		if (tokenName != null) {
+			javax.servlet.http.Cookie[] cookies = request.getCookies();
+			if (cookies != null) {
+				for (int i = 0; i < cookies.length; i++) {
+					Cookie currentCookie = cookies[i];
+					if (tokenName.equals(currentCookie.getName())) {
+						Cookie loginCookie = new Cookie(currentCookie.getName(), currentCookie.getValue());
+						GitUtils.setSSOToken(loginCookie);
+					}
+				}
 			}
 		}
 
