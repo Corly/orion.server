@@ -16,13 +16,26 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import com.meterware.httpunit.*;
-import java.io.*;
-import java.net.*;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
-import org.eclipse.core.filesystem.*;
-import org.eclipse.core.runtime.*;
+
+import org.eclipse.core.filesystem.EFS;
+import org.eclipse.core.filesystem.IFileInfo;
+import org.eclipse.core.filesystem.IFileStore;
+import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.IPath;
+import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.Path;
+import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.URIUtil;
 import org.eclipse.orion.internal.server.core.IOUtilities;
 import org.eclipse.orion.internal.server.core.metastore.SimpleMetaStore;
@@ -30,12 +43,24 @@ import org.eclipse.orion.internal.server.core.metastore.SimpleMetaStoreUtil;
 import org.eclipse.orion.internal.server.servlets.ProtocolConstants;
 import org.eclipse.orion.server.core.LogHelper;
 import org.eclipse.orion.server.core.OrionConfiguration;
-import org.eclipse.orion.server.core.metastore.*;
+import org.eclipse.orion.server.core.metastore.IMetaStore;
+import org.eclipse.orion.server.core.metastore.ProjectInfo;
+import org.eclipse.orion.server.core.metastore.UserInfo;
+import org.eclipse.orion.server.core.metastore.WorkspaceInfo;
 import org.eclipse.orion.server.tests.AbstractServerTest;
 import org.eclipse.orion.server.tests.ServerTestsActivator;
 import org.eclipse.orion.server.tests.servlets.internal.DeleteMethodWebRequest;
-import org.json.*;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.xml.sax.SAXException;
+
+import com.meterware.httpunit.GetMethodWebRequest;
+import com.meterware.httpunit.PostMethodWebRequest;
+import com.meterware.httpunit.PutMethodWebRequest;
+import com.meterware.httpunit.WebConversation;
+import com.meterware.httpunit.WebRequest;
+import com.meterware.httpunit.WebResponse;
 
 /**
  * Common base class for file system tests.
@@ -258,7 +283,7 @@ public abstract class FileSystemTest extends AbstractServerTest {
 			JSONObject attributes = dirObject.getJSONObject(ProtocolConstants.KEY_ATTRIBUTES);
 			assertNotNull("Expected Attributes section in directory metadata", attributes);
 			if (isReadonly != null) {
-				assertEquals("Ibvalid directory readonly attribute", isReadonly, attributes.getBoolean(ProtocolConstants.KEY_ATTRIBUTE_READ_ONLY));
+				assertEquals("Invalid directory readonly attribute", isReadonly, attributes.getBoolean(ProtocolConstants.KEY_ATTRIBUTE_READ_ONLY));
 			}
 			if (isExecutable != null) {
 				assertEquals("Invalid directory executable attribute", isExecutable, attributes.getBoolean(ProtocolConstants.KEY_ATTRIBUTE_EXECUTABLE));
@@ -346,10 +371,37 @@ public abstract class FileSystemTest extends AbstractServerTest {
 		return request;
 	}
 
+	protected JSONObject getNewDirWithAttrJSON(String dirName) throws JSONException {
+		JSONObject attr = new JSONObject();
+		attr.put(ProtocolConstants.KEY_ATTRIBUTE_READ_ONLY, true);
+		attr.put(ProtocolConstants.KEY_ATTRIBUTE_EXECUTABLE, false);
+		attr.put(ProtocolConstants.KEY_ATTRIBUTE_SYMLINK, true);
+
+		JSONObject json = new JSONObject();
+		json.put(ProtocolConstants.KEY_NAME, dirName);
+		json.put(ProtocolConstants.KEY_DIRECTORY, true);
+		json.put(ProtocolConstants.KEY_ATTRIBUTES, attr);
+		return json;
+	}
+
 	protected JSONObject getNewDirJSON(String dirName) throws JSONException {
 		JSONObject json = new JSONObject();
 		json.put(ProtocolConstants.KEY_NAME, dirName);
 		json.put(ProtocolConstants.KEY_DIRECTORY, true);
+		return json;
+	}
+
+	protected JSONObject getNewFileWithAttrJSON(String fileName) throws JSONException {
+		JSONObject attr = new JSONObject();
+		attr.put(ProtocolConstants.KEY_ATTRIBUTE_READ_ONLY, true);
+		attr.put(ProtocolConstants.KEY_ATTRIBUTE_EXECUTABLE, false);
+		attr.put(ProtocolConstants.KEY_ATTRIBUTE_SYMLINK, true);
+
+		JSONObject json = new JSONObject();
+		json.put(ProtocolConstants.KEY_DIRECTORY, false);
+		json.put("Charset", "UTF-8");
+		json.put("ContentType", "text/plain");
+		json.put(ProtocolConstants.KEY_ATTRIBUTES, attr);
 		return json;
 	}
 

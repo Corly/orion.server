@@ -12,12 +12,19 @@ package org.eclipse.orion.internal.server.servlets.file;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.net.*;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLDecoder;
+
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import org.eclipse.core.filesystem.*;
-import org.eclipse.core.runtime.*;
+
+import org.eclipse.core.filesystem.EFS;
+import org.eclipse.core.filesystem.IFileInfo;
+import org.eclipse.core.filesystem.IFileStore;
+import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.URIUtil;
 import org.eclipse.orion.internal.server.servlets.ProtocolConstants;
 import org.eclipse.orion.internal.server.servlets.ServletResourceHandler;
@@ -25,7 +32,9 @@ import org.eclipse.orion.server.core.LogHelper;
 import org.eclipse.orion.server.core.ServerStatus;
 import org.eclipse.orion.server.servlets.OrionServlet;
 import org.eclipse.osgi.util.NLS;
-import org.json.*;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
  * Handles HTTP requests against directories for eclipse web protocol version
@@ -114,17 +123,35 @@ public class DirectoryHandlerV1 extends ServletResourceHandler<IFileStore> {
 	 * Performs the actual modification corresponding to a POST request. All preconditions
 	 * are assumed to be satisfied.
 	 * @return <code>true</code> if the operation was successful, and <code>false</code> otherwise.
+	 * @throws JSONException 
 	 */
-	private boolean performPost(HttpServletRequest request, HttpServletResponse response, JSONObject requestObject, IFileStore toCreate, int options) throws CoreException, IOException, ServletException {
+	private boolean performPost(HttpServletRequest request, HttpServletResponse response, JSONObject requestObject, IFileStore toCreate, int options) throws CoreException, IOException, ServletException, JSONException {
 		boolean isCopy = (options & CREATE_COPY) != 0;
 		boolean isMove = (options & CREATE_MOVE) != 0;
 		try {
 			if (isCopy || isMove)
 				return performCopyMove(request, response, requestObject, toCreate, isCopy, options);
+
+			IFileInfo info = toCreate.fetchInfo(EFS.NONE, null);
+			if (info.exists() && (options & CREATE_NO_OVERWRITE) == 0) {
+				if (requestObject.has("Attributes")) {
+					JSONObject attributes = requestObject.getJSONObject("Attributes");
+					if (attributes.has("ReadOnly")) {
+						info.setAttribute(EFS.ATTRIBUTE_READ_ONLY, attributes.getBoolean("ReadOnly"));
+					}
+					if (attributes.has("Executable")) {
+						info.setAttribute(EFS.ATTRIBUTE_EXECUTABLE, attributes.getBoolean("Executable"));
+					}
+					toCreate.putInfo(info, EFS.SET_ATTRIBUTES, null);
+					return true;
+				}
+			}
+
 			if (requestObject.optBoolean(ProtocolConstants.KEY_DIRECTORY))
 				toCreate.mkdir(EFS.NONE, null);
 			else
 				toCreate.openOutputStream(EFS.NONE, null).close();
+
 		} catch (CoreException e) {
 			IStatus status = e.getStatus();
 			if (status != null && status.getCode() == EFS.ERROR_WRITE) {
@@ -140,6 +167,7 @@ public class DirectoryHandlerV1 extends ServletResourceHandler<IFileStore> {
 	/**
 	 * Perform a copy or move as specified by the request.
 	 * @return <code>true</code> if the operation was successful, and <code>false</code> otherwise.
+	 * @throws JSONException 
 	 */
 	private boolean performCopyMove(HttpServletRequest request, HttpServletResponse response, JSONObject requestObject, IFileStore toCreate, boolean isCopy, int options) throws ServletException, CoreException {
 		String locationString = requestObject.optString(ProtocolConstants.KEY_LOCATION, null);

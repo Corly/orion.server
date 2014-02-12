@@ -177,6 +177,32 @@ public class CoreFilesTest extends FileSystemTest {
 	}
 
 	@Test
+	public void testChangeDirectoryAttributesByPost() throws CoreException, IOException, SAXException, JSONException {
+		String directoryPath = "sample/directory/path" + System.currentTimeMillis();
+		createDirectory(directoryPath);
+
+		String dirName = "testdir";
+		webConversation.setExceptionsThrownOnErrorStatus(false);
+
+		WebRequest requestCreate = getPostFilesRequest(directoryPath, getNewDirJSON(dirName).toString(), dirName);
+		WebResponse responseCreate = webConversation.getResponse(requestCreate);
+
+		assertEquals(HttpURLConnection.HTTP_CREATED, responseCreate.getResponseCode());
+		assertTrue("Create directory response was OK, but the directory does not exist", checkDirectoryExists(directoryPath + "/" + dirName));
+		assertEquals("Response should contain directory metadata in JSON, but was " + responseCreate.getText(), "application/json", responseCreate.getContentType());
+		JSONObject responseCreateObject = new JSONObject(responseCreate.getText());
+		assertNotNull("No directory information in response", responseCreateObject);
+		checkDirectoryMetadata(responseCreateObject, dirName, null, null, null, null, null);
+
+		WebRequest requestUpdateAttributes = getPostFilesRequest(directoryPath, getNewDirWithAttrJSON(dirName).toString(), dirName);
+		WebResponse responseUpdateAttributes = webConversation.getResponse(requestUpdateAttributes);
+
+		JSONObject responseUpdateAttributesObject = new JSONObject(responseUpdateAttributes.getText());
+		assertNotNull("No directory information in response", responseUpdateAttributesObject);
+		checkDirectoryMetadata(responseUpdateAttributesObject, dirName, null, null, true, false, null);
+	}
+
+	@Test
 	public void testCreateEmptyFile() throws CoreException, IOException, SAXException, JSONException {
 		String directoryPath = "sample/directory/path" + System.currentTimeMillis();
 		createDirectory(directoryPath);
@@ -201,6 +227,57 @@ public class CoreFilesTest extends FileSystemTest {
 		responseObject = new JSONObject(response.getText());
 		assertNotNull("No direcory information in response", responseObject);
 		checkFileMetadata(responseObject, fileName, null, null, null, null, null, null, null, null);
+	}
+
+	@Test
+	public void testChangeFileAttributesByPost() throws CoreException, IOException, SAXException, JSONException {
+		String directoryPath = "sample/directory/path" + System.currentTimeMillis();
+		createDirectory(directoryPath);
+		String fileName = "testfile.txt";
+
+		WebRequest request = getPostFilesRequest(directoryPath, getNewFileJSON(fileName).toString(), fileName);
+		WebResponse response = webConversation.getResponse(request);
+
+		assertEquals(HttpURLConnection.HTTP_CREATED, response.getResponseCode());
+		assertTrue("Create file response was OK, but the file does not exist", checkFileExists(directoryPath + "/" + fileName));
+		assertEquals("Response should contain file metadata in JSON, but was " + response.getText(), "application/json", response.getContentType());
+		JSONObject responseObject = new JSONObject(response.getText());
+		assertNotNull("No file information in response", responseObject);
+		checkFileMetadata(responseObject, fileName, null, null, null, null, null, null, null, null);
+
+		//should be able to perform GET on location header to obtain metadata
+		String location = response.getHeaderField("Location");
+		request = getGetRequest(location + "?parts=meta");
+		response = webConversation.getResource(request);
+		assertNotNull(location);
+		assertEquals(HttpURLConnection.HTTP_OK, response.getResponseCode());
+		responseObject = new JSONObject(response.getText());
+		assertNotNull("No direcory information in response", responseObject);
+		checkFileMetadata(responseObject, fileName, null, null, null, null, null, null, null, null);
+
+		//create an empty file with different attributes and update the current one using post
+		request = getPostFilesRequest(directoryPath, getNewFileWithAttrJSON(fileName).toString(), fileName);
+		response = webConversation.getResponse(request);
+		responseObject = new JSONObject(response.getText());
+		checkFileMetadata(responseObject, fileName, null, null, null, null, null, true, false, null);
+
+		assertEquals(HttpURLConnection.HTTP_OK, response.getResponseCode());
+		assertTrue("Create file response was OK, but the file does not exist", checkFileExists(directoryPath + "/" + fileName));
+		assertEquals("Response should contain file metadata in JSON, but was " + response.getText(), "application/json", response.getContentType());
+		responseObject = new JSONObject(response.getText());
+		assertNotNull("No file information in response", responseObject);
+		checkFileMetadata(responseObject, fileName, null, null, null, null, null, true, false, null);
+
+		//should be able to perform GET on location header to obtain metadata
+		location = response.getHeaderField("Location");
+		request = getGetRequest(location + "?parts=meta");
+		response = webConversation.getResource(request);
+		assertNotNull(location);
+		assertEquals(HttpURLConnection.HTTP_OK, response.getResponseCode());
+		responseObject = new JSONObject(response.getText());
+		assertNotNull("No direcory information in response", responseObject);
+		checkFileMetadata(responseObject, fileName, null, null, null, null, null, true, false, null);
+
 	}
 
 	/**
